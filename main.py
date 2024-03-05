@@ -30,7 +30,7 @@ class APISession(Session):
             self.input_listener_name = f"input-{self.code}"
             self.response_listener_name = f"reponse-{self.code}"
 
-    async def __execute(self, source_code: str, output_method: Callable, input_method: Callable):
+    async def __execute(self, source_code: str, output_method: Callable, input_method: Callable) -> None:
         source_code = source_code.lstrip('\n')
         source_code = re.sub(
             pattern=r"^(\s{4})+",
@@ -50,11 +50,11 @@ class APISession(Session):
         self.remove()
 
     async def start(self, source_code: str) -> None:
-        def output_method(*values: object):
+        def output_method(*values: object) -> None:
             line = ' '.join([str(value) for value in values])
             self.output += f"{line}\n"
 
-        def input_method(prompt: str):
+        def input_method(prompt: str) -> str:
             events.dispatch(self.response_listener_name, status="waiting", prompt=prompt)
 
             result_input = ''
@@ -84,7 +84,7 @@ async def execute(request: ExecuteRequest) -> ExecuteResponse:
     result_prompt = None
 
     response_event = asyncio.Event()
-    async def response_listener(status: StatusType, prompt: Optional[str] = None):
+    async def response_listener(status: StatusType, prompt: Optional[str] = None) -> None:
         nonlocal result_status, result_prompt
         result_status = status
         result_prompt = prompt
@@ -115,7 +115,7 @@ async def exexcute_input(request: ExecuteInputRequest) -> ExecuteResponse:
         result_prompt = None
 
         response_event = asyncio.Event()
-        async def response_listener(status: StatusType, prompt: Optional[str] = None):
+        async def response_listener(status: StatusType, prompt: Optional[str] = None) -> None:
             nonlocal result_status, result_prompt
             result_status = status
             result_prompt = prompt
