@@ -77,7 +77,7 @@ class APISession(Session):
 
 @api.post("/execute")
 async def execute(request: ExecuteRequest) -> ExecuteResponse:
-
+    """Executes the provided Moon code and returns the results of its execution."""
     session = APISession()
 
     result_status = "error"
@@ -107,6 +107,7 @@ async def execute(request: ExecuteRequest) -> ExecuteResponse:
 
 @api.post("/execute/input")
 async def exexcute_input(request: ExecuteInputRequest) -> ExecuteResponse:
+    """Provides input to an ongoing Moon code execution identified by the session code."""
     dummy_session = APISession(dummy=True)
     target_session = dummy_session.get_by_code(request.session_code)
 
