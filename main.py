@@ -22,7 +22,7 @@ api = FastAPI(
 
 origins = [
     "http://localhost:3000",
-    "http://moon.warn.group"
+    "https://moon.warn.group"
     ]
 
 api.add_middleware(
