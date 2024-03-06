@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Callable, Optional
 
 from basetypes import ExecuteInputRequest, ExecuteRequest, ExecuteResponse, StatusType
@@ -17,6 +18,16 @@ nest_asyncio.apply()
 api = FastAPI(
     title="Moon Interpreter API",
     version="0.1.0",
+)
+
+origins = ["http://localhost:3000"] # Replace with allowed origins
+
+api.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 events = EventsManager()
