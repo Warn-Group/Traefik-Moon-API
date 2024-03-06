@@ -20,7 +20,10 @@ api = FastAPI(
     version="0.1.0",
 )
 
-origins = ["http://localhost:3000"] # Replace with allowed origins
+origins = [
+    "http://localhost:3000",
+    "http://moon.warn.group"
+    ]
 
 api.add_middleware(
     CORSMiddleware,
