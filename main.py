@@ -63,6 +63,8 @@ class APISession(Session):
                 nonlocal result_input
                 result_input = input
 
+                self.output += f"{prompt}{input}\n"
+
                 events.remove_listener(input_listener, self.input_listener_name)
                 input_event.set()
 
@@ -71,6 +73,7 @@ class APISession(Session):
             # Issue with loop already running
             loop = asyncio.get_event_loop()
             loop.run_until_complete(input_event.wait())
+
             return result_input
 
         asyncio.create_task(self.__execute(source_code, output_method, input_method))
