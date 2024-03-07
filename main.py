@@ -11,9 +11,6 @@ import asyncio
 import re
 
 
-# Issue with loop already running
-import nest_asyncio
-nest_asyncio.apply()
 
 api = FastAPI(
     title="Moon Interpreter API",
@@ -64,31 +61,33 @@ class APISession(Session):
         self.remove()
 
     async def start(self, source_code: str) -> None:
+        loop = asyncio.get_running_loop()
+
         def output_method(*values: object) -> None:
             line = ' '.join([str(value) for value in values])
             self.output += f"{line}\n"
 
         def input_method(prompt: str) -> str:
-            events.dispatch(self.response_listener_name, status="waiting", prompt=prompt)
+            async def async_input_handler() -> str:
+                events.dispatch(self.response_listener_name, status="waiting", prompt=prompt)
 
-            result_input = ''
-            input_event = asyncio.Event()
-            async def input_listener(input: str):
-                nonlocal result_input
-                result_input = input
+                result_input = ''
+                input_event = asyncio.Event()
+                async def input_listener(input: str):
+                    nonlocal result_input
+                    result_input = input
 
-                self.output += f"{prompt}{input}\n"
+                    self.output += f"{prompt}{input}\n"
 
-                events.remove_listener(input_listener, self.input_listener_name)
-                input_event.set()
+                    events.remove_listener(input_listener, self.input_listener_name)
+                    input_event.set()
 
-            events.add_listener(input_listener, self.input_listener_name)
+                events.add_listener(input_listener, self.input_listener_name)
+                await input_event.wait()
+                return result_input
 
-            # Issue with loop already running
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(input_event.wait())
-
-            return result_input
+            input_future = asyncio.run_coroutine_threadsafe(coro=async_input_handler(), loop=loop)
+            return input_future.result()
 
         asyncio.create_task(self.__execute(source_code, output_method, input_method))
 
