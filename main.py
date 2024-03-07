@@ -6,18 +6,34 @@ from basetypes import ExecuteInputRequest, ExecuteRequest, ExecuteResponse, Stat
 from events import EventsManager
 from moon import build_lexer, build_parser, execute_program
 from session import Session
+from parallel import call_method, run_parallel
 
-import asyncio
+import anyio
 import re
 
+def blocking_execute(sock, parsed_code):
+    with sock.makefile("rb") as f:
+        def input_method(prompt):
+            return call_method(sock, f, "input_method", prompt)
+            
+        def output_method(value):
+            return call_method(sock, f, "output_method", value)
 
-# Issue with loop already running
-import nest_asyncio
-nest_asyncio.apply()
+        execute_program(parsed_code, input_method=input_method, output_method=output_method)
+        call_method(sock, f, "break")
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app):
+    async with anyio.create_task_group() as tg:
+        app.task_group = tg
+        yield
 
 api = FastAPI(
     title="Moon Interpreter API",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 origins = [
@@ -36,13 +52,15 @@ api.add_middleware(
 events = EventsManager()
 
 class APISession(Session):
-    def __init__(self, dummy: bool = False) -> None:
+    def __init__(self, dummy: bool = False, timeout: int = 10) -> None:
         super().__init__(dummy)
         if not dummy:
             self.output = ''
 
             self.input_listener_name = f"input-{self.code}"
             self.response_listener_name = f"reponse-{self.code}"
+
+            self.timeout = timeout
 
     async def __execute(self, source_code: str, output_method: Callable, input_method: Callable) -> None:
         source_code = source_code.lstrip('\n')
@@ -58,21 +76,26 @@ class APISession(Session):
         parser = build_parser()
         parsed_code = parser.parse(source_code+'\n', lexer=lexer)
 
-        execute_program(parsed_code, output_method, input_method)
+        methods = {
+            "input_method": input_method, "output_method": output_method
+        }
+
+        await run_parallel(methods, blocking_execute, parsed_code)
 
         events.dispatch(self.response_listener_name, status="completed")
         self.remove()
 
     async def start(self, source_code: str) -> None:
-        def output_method(*values: object) -> None:
+        async def output_method(*values: object) -> None:
             line = ' '.join([str(value) for value in values])
             self.output += f"{line}\n"
 
-        def input_method(prompt: str) -> str:
+        async def input_method(prompt: str) -> str:
+            self.cancel_scope = anyio.current_time() + 5
             events.dispatch(self.response_listener_name, status="waiting", prompt=prompt)
 
             result_input = ''
-            input_event = asyncio.Event()
+            input_event = anyio.Event()
             async def input_listener(input: str):
                 nonlocal result_input
                 result_input = input
@@ -84,23 +107,27 @@ class APISession(Session):
 
             events.add_listener(input_listener, self.input_listener_name)
 
-            # Issue with loop already running
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(input_event.wait())
+            await input_event.wait()
 
             return result_input
 
-        asyncio.create_task(self.__execute(source_code, output_method, input_method))
+        try:
+            with anyio.fail_after(self.timeout) as cancel_scope:
+                self.cancel_scope = cancel_scope
+                await self.__execute(source_code, output_method, input_method)
+        except Exception as e:
+            print(f"{type(e)} {e} Timout raised, deleting session")
+
 
 @api.post("/execute")
 async def execute(request: ExecuteRequest) -> ExecuteResponse:
     """Executes the provided Moon code and returns the results of its execution."""
-    session = APISession()
+    session = APISession(timeout=5)
 
     result_status = "error"
     result_prompt = None
 
-    response_event = asyncio.Event()
+    response_event = anyio.Event()
     async def response_listener(status: StatusType, prompt: Optional[str] = None) -> None:
         nonlocal result_status, result_prompt
         result_status = status
@@ -111,7 +138,7 @@ async def execute(request: ExecuteRequest) -> ExecuteResponse:
 
     events.add_listener(response_listener, session.response_listener_name)
 
-    asyncio.create_task(session.start(request.source_code))
+    api.task_group.start_soon(session.start, request.source_code)
 
     await response_event.wait()
 
@@ -132,7 +159,7 @@ async def exexcute_input(request: ExecuteInputRequest) -> ExecuteResponse:
         result_status = "error"
         result_prompt = None
 
-        response_event = asyncio.Event()
+        response_event = anyio.Event()
         async def response_listener(status: StatusType, prompt: Optional[str] = None) -> None:
             nonlocal result_status, result_prompt
             result_status = status
