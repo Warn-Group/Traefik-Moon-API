@@ -8,6 +8,9 @@ from typing import Callable
 import anyio
 import re
 
+TIMEOUT_INPUT = 30
+TIMEOUT_RUNNING = 2.5
+
 def blocking_execute(sock, parsed_code):
     """This function need to be in the global scope"""
     with sock.makefile("rb") as f:
@@ -21,7 +24,7 @@ def blocking_execute(sock, parsed_code):
         call_method(sock, f, "break")
 
 class ServiceSession(Session):
-    def __init__(self, events: EventsManager, timeout: int, dummy: bool = False) -> None:
+    def __init__(self, events: EventsManager, timeout: float = TIMEOUT_RUNNING, dummy: bool = False) -> None:
         super().__init__(dummy)
         if not dummy:
             self.output = ''
@@ -61,7 +64,7 @@ class ServiceSession(Session):
             self.output += f"{line}\n"
 
         async def input_method(prompt: str) -> str:
-            self.cancel_scope.deadline = anyio.current_time() + 5
+            self.cancel_scope.deadline = anyio.current_time() + TIMEOUT_INPUT
             self.events.dispatch(self.response_listener_name, status="waiting", prompt=prompt)
 
             result_input = ''
@@ -78,6 +81,8 @@ class ServiceSession(Session):
             self.events.add_listener(input_listener, self.input_listener_name)
 
             await input_event.wait()
+
+            self.cancel_scope.deadline = anyio.current_time() + TIMEOUT_RUNNING
 
             return result_input
 

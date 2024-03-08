@@ -43,7 +43,7 @@ def app_factory():
 @router.post("/execute")
 async def execute(request: ExecuteRequest, raw_request: RawRequest) -> ExecuteResponse:
     """Executes the provided Moon code and returns the results of its execution."""
-    session = ServiceSession(events=raw_request.app.events, timeout=5)
+    session = ServiceSession(events=raw_request.app.events)
     events: EventsManager = raw_request.app.events
     task_group: TaskGroup = raw_request.app.task_group
 
