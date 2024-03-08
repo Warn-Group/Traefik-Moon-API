@@ -9,4 +9,4 @@
 ### Installation
 
 1. Install dependencies `pip install -r ./requirements.txt`
-2. Run the API `uvicorn main:api --reload`
+2. Run the API `python -m hypercorn --worker-class=trio "main:app_factory()"`
