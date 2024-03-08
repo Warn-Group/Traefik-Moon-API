@@ -1,5 +1,7 @@
 import asyncio
+import functools
 
+from anyio.abc import TaskGroup
 from typing import Any, Callable, Dict, List
 
 class _MissingSentinel:
@@ -20,8 +22,9 @@ class _MissingSentinel:
 MISSING: Any = _MissingSentinel()
 
 class EventsManager():
-    def __init__(self) -> None:
+    def __init__(self, task_group: TaskGroup) -> None:
         self._listeners: Dict[str, List[Callable]] = {}
+        self._task_group = task_group
 
     def remove_listener(self, func: Callable, name: str = MISSING) -> None:
         name = func.__name__ if name is MISSING else name
@@ -55,4 +58,4 @@ class EventsManager():
         listener = self._listeners.get(event, None)
         if listener:
             for func in listener:
-                asyncio.create_task(func(*args, **kwargs))
+                self._task_group.start_soon(functools.partial(func, *args, **kwargs))

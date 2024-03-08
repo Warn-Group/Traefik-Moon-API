@@ -11,26 +11,22 @@ from parallel import call_method, run_parallel
 import anyio
 import re
 
-def blocking_execute(sock, parsed_code):
-    with sock.makefile("rb") as f:
-        def input_method(prompt):
-            return call_method(sock, f, "input_method", prompt)
-            
-        def output_method(value):
-            return call_method(sock, f, "output_method", value)
-
-        execute_program(parsed_code, input_method=input_method, output_method=output_method)
-        call_method(sock, f, "break")
-
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
 async def lifespan(app):
     async with anyio.create_task_group() as tg:
         app.task_group = tg
+        app.events = EventsManager(tg)
         yield
 
-api = FastAPI(
+class API(FastAPI):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.task_group: TaskGroup
+        self.events: EventsManager
+
+api = API(
     title="Moon Interpreter API",
     version="0.1.0",
     lifespan=lifespan,
@@ -39,7 +35,7 @@ api = FastAPI(
 origins = [
     "http://localhost:3000",
     "https://moon.warn.group"
-    ]
+]
 
 api.add_middleware(
     CORSMiddleware,
@@ -49,7 +45,17 @@ api.add_middleware(
     allow_headers=["*"],
 )
 
-events = EventsManager()
+def blocking_execute(sock, parsed_code):
+    """This function need to be in the global scope"""
+    with sock.makefile("rb") as f:
+        def input_method(prompt: str):
+            return call_method(sock, f, "input_method", prompt)
+            
+        def output_method(*values: object):
+            return call_method(sock, f, "output_method", *values)
+
+        execute_program(parsed_code, input_method=input_method, output_method=output_method)
+        call_method(sock, f, "break")
 
 class APISession(Session):
     def __init__(self, dummy: bool = False, timeout: int = 10) -> None:
@@ -82,7 +88,7 @@ class APISession(Session):
 
         await run_parallel(methods, blocking_execute, parsed_code)
 
-        events.dispatch(self.response_listener_name, status="completed")
+        api.events.dispatch(self.response_listener_name, status="completed")
         self.remove()
 
     async def start(self, source_code: str) -> None:
@@ -91,8 +97,8 @@ class APISession(Session):
             self.output += f"{line}\n"
 
         async def input_method(prompt: str) -> str:
-            self.cancel_scope = anyio.current_time() + 5
-            events.dispatch(self.response_listener_name, status="waiting", prompt=prompt)
+            self.cancel_scope.deadline = anyio.current_time() + 5
+            api.events.dispatch(self.response_listener_name, status="waiting", prompt=prompt)
 
             result_input = ''
             input_event = anyio.Event()
@@ -102,10 +108,10 @@ class APISession(Session):
 
                 self.output += f"{prompt}{input}\n"
 
-                events.remove_listener(input_listener, self.input_listener_name)
+                api.events.remove_listener(input_listener, self.input_listener_name)
                 input_event.set()
 
-            events.add_listener(input_listener, self.input_listener_name)
+            api.events.add_listener(input_listener, self.input_listener_name)
 
             await input_event.wait()
 
@@ -115,9 +121,9 @@ class APISession(Session):
             with anyio.fail_after(self.timeout) as cancel_scope:
                 self.cancel_scope = cancel_scope
                 await self.__execute(source_code, output_method, input_method)
-        except Exception as e:
-            print(f"{type(e)} {e} Timout raised, deleting session")
-
+        except TimeoutError:
+            self.remove()
+            api.events.dispatch(self.response_listener_name, status="error")
 
 @api.post("/execute")
 async def execute(request: ExecuteRequest) -> ExecuteResponse:
@@ -133,10 +139,10 @@ async def execute(request: ExecuteRequest) -> ExecuteResponse:
         result_status = status
         result_prompt = prompt
 
-        events.remove_listener(response_listener, session.response_listener_name)
+        api.events.remove_listener(response_listener, session.response_listener_name)
         response_event.set()
 
-    events.add_listener(response_listener, session.response_listener_name)
+    api.events.add_listener(response_listener, session.response_listener_name)
 
     api.task_group.start_soon(session.start, request.source_code)
 
@@ -165,12 +171,12 @@ async def exexcute_input(request: ExecuteInputRequest) -> ExecuteResponse:
             result_status = status
             result_prompt = prompt
 
-            events.remove_listener(response_listener, target_session.response_listener_name)
+            api.events.remove_listener(response_listener, target_session.response_listener_name)
             response_event.set()
 
-        events.add_listener(response_listener, target_session.response_listener_name)
+        api.events.add_listener(response_listener, target_session.response_listener_name)
 
-        events.dispatch(target_session.input_listener_name, input=request.input)
+        api.events.dispatch(target_session.input_listener_name, input=request.input)
 
         await response_event.wait()
 
