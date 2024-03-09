@@ -35,6 +35,10 @@ class ServiceSession(Session):
             self.events = events
             self.timeout = timeout
 
+    @classmethod
+    def dummy_session(cls):
+        return cls(None, dummy=True) # type: ignore
+
     async def __execute(self, source_code: str, output_method: Callable, input_method: Callable) -> None:
         source_code = source_code.lstrip('\n')
         source_code = re.sub(

@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException
+from anyio import Event, create_task_group
 from anyio.abc import TaskGroup
+from contextlib import asynccontextmanager
 from fastapi import HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
@@ -8,13 +10,9 @@ from basetypes import API, ExecuteInputRequest, ExecuteRequest, ExecuteResponse,
 from events import EventsManager
 from service import ServiceSession
 
-import anyio
-
-from contextlib import asynccontextmanager
-
 @asynccontextmanager
 async def lifespan(app: API):
-    async with anyio.create_task_group() as tg:
+    async with create_task_group() as tg:
         app.task_group = tg
         app.events = EventsManager(tg)
         yield
@@ -50,7 +48,7 @@ async def execute(request: ExecuteRequest, raw_request: RawRequest) -> ExecuteRe
     result_status = "error"
     result_prompt = None
 
-    response_event = anyio.Event()
+    response_event = Event()
     async def response_listener(status: StatusType, prompt: Optional[str] = None) -> None:
         nonlocal result_status, result_prompt
         result_status = status
@@ -75,7 +73,7 @@ async def execute(request: ExecuteRequest, raw_request: RawRequest) -> ExecuteRe
 @router.post("/execute/input")
 async def exexcute_input(request: ExecuteInputRequest, raw_request: RawRequest) -> ExecuteResponse:
     """Provides input to an ongoing Moon code execution identified by the session code."""
-    dummy_session = ServiceSession(None, None, dummy=True) # type: ignore
+    dummy_session = ServiceSession.dummy_session()
     target_session = dummy_session.get_by_code(request.session_code)
 
     if target_session:
@@ -84,7 +82,7 @@ async def exexcute_input(request: ExecuteInputRequest, raw_request: RawRequest) 
         result_status = "error"
         result_prompt = None
 
-        response_event = anyio.Event()
+        response_event = Event()
         async def response_listener(status: StatusType, prompt: Optional[str] = None) -> None:
             nonlocal result_status, result_prompt
             result_status = status
