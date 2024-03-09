@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 from anyio import Event, create_task_group
 from anyio.abc import TaskGroup
 from contextlib import asynccontextmanager
@@ -42,8 +42,8 @@ def app_factory():
 async def execute(request: ExecuteRequest, raw_request: RawRequest) -> ExecuteResponse:
     """Executes the provided Moon code and returns the results of its execution."""
     session = ServiceSession(events=raw_request.app.events)
-    events: EventsManager = raw_request.app.events
-    task_group: TaskGroup = raw_request.app.task_group
+    events = raw_request.app.events
+    task_group = raw_request.app.task_group
 
     result_status = "error"
     result_prompt = None
