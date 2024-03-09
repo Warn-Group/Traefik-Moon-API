@@ -9,7 +9,7 @@ import anyio
 import re
 
 TIMEOUT_INPUT = 30
-TIMEOUT_RUNNING = 2.5
+TIMEOUT_RUNNING = 10
 
 def blocking_execute(sock, parsed_code):
     """This function need to be in the global scope"""
