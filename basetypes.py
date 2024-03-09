@@ -1,7 +1,7 @@
 from anyio.abc import TaskGroup
 from fastapi import Body, FastAPI, Request
 from pydantic import BaseModel
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from events import EventsManager
 
@@ -22,9 +22,9 @@ StatusType = Literal["completed", "waiting", "error"]
 class ExecuteResponse(BaseModel):
     session_code: str
     status: StatusType
-    prompt: Optional[str] = None
-    output: Optional[str] = None
-    errors: Optional[str] = None
+    prompt: Optional[str] = None # if status == "waiting"
+    output: str
+    errors: list[Any]
 
 class ExecuteInputRequest(BaseModel):
     session_code: str

@@ -68,6 +68,7 @@ async def execute(request: ExecuteRequest, raw_request: RawRequest) -> ExecuteRe
         status=result_status,
         prompt=result_prompt,
         output=session.output,
+        errors=session.errors
     )
 
 @router.post("/execute/input")
@@ -102,6 +103,7 @@ async def exexcute_input(request: ExecuteInputRequest, raw_request: RawRequest) 
             status=result_status,
             prompt=result_prompt,
             output=target_session.output,
+            errors=target_session.errors
         )
 
     raise HTTPException(400, "Invalid session code")

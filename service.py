@@ -28,6 +28,7 @@ class ServiceSession(Session):
         super().__init__(dummy)
         if not dummy:
             self.output = ''
+            self.errors = []
 
             self.input_listener_name = f"input-{self.code}"
             self.response_listener_name = f"reponse-{self.code}"
@@ -37,6 +38,7 @@ class ServiceSession(Session):
 
     @classmethod
     def dummy_session(cls):
+        """This dummy session is only meant to be used for accessing shared sessions without creating one."""
         return cls(None, dummy=True) # type: ignore
 
     async def __execute(self, source_code: str, output_method: Callable, input_method: Callable) -> None:
@@ -52,6 +54,12 @@ class ServiceSession(Session):
         lexer.input(source_code)
         parser = build_parser()
         parsed_code = parser.parse(source_code+'\n', lexer=lexer)
+
+        if lexer.errors:
+            self.errors.append(lexer.errors)
+
+        if not parsed_code:
+            raise ValueError("No instruction to execute")
 
         methods = {
             "input_method": input_method, "output_method": output_method
@@ -94,6 +102,21 @@ class ServiceSession(Session):
             with anyio.fail_after(self.timeout) as cancel_scope:
                 self.cancel_scope = cancel_scope
                 await self.__execute(source_code, output_method, input_method)
-        except TimeoutError:
-            self.remove()
-            self.events.dispatch(self.response_listener_name, status="error")
+        except Exception as exception:
+            # match case unsupported in python 3.9
+
+            try:
+                raise exception
+
+            except TimeoutError:
+                self.errors.append("Program Timeout: code execution exceeded the allowed time limit")
+            except ExceptionGroup:
+                self.errors.append("Execution Error: an error occurred while running your code")
+            except ValueError as e:
+                self.errors.append(f"Invalid User Code: {' '.join(e.args)}")
+            except Exception as e:
+                self.errors.append(f"Unknown Error: An unexpected error occurred {type(e)}. Please report this issue on Github for further assistance: https://github.com/PaulMarisOUMary/Moon/issues")
+
+            finally:
+                self.remove()
+                self.events.dispatch(self.response_listener_name, status="error")
