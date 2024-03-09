@@ -8,7 +8,7 @@ from typing import Callable
 import anyio
 import re
 
-TIMEOUT_INPUT = 30
+TIMEOUT_INPUT = 120
 TIMEOUT_RUNNING = 10
 
 def blocking_execute(sock, parsed_code):
