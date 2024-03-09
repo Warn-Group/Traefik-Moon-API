@@ -1,3 +1,9 @@
+anyio
+trio
+
 fastapi
-uvicorn[standard]
+hypercorn[trio]
+
 git+https://github.com/PaulMarisOUMary/Moon@main
+
+ply

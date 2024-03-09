@@ -1,106 +1,54 @@
 from fastapi import FastAPI, HTTPException
+from anyio import Event, create_task_group
+from anyio.abc import TaskGroup
+from contextlib import asynccontextmanager
+from fastapi import HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Callable, Optional
+from typing import Optional
 
-from basetypes import ExecuteInputRequest, ExecuteRequest, ExecuteResponse, StatusType
+from basetypes import API, ExecuteInputRequest, ExecuteRequest, ExecuteResponse, RawRequest, StatusType
 from events import EventsManager
-from moon import build_lexer, build_parser, execute_program
-from session import Session
+from service import ServiceSession
 
-import asyncio
-import re
+@asynccontextmanager
+async def lifespan(app: API):
+    async with create_task_group() as tg:
+        app.task_group = tg
+        app.events = EventsManager(tg)
+        yield
 
+router = APIRouter()
 
-# Issue with loop already running
-import nest_asyncio
-nest_asyncio.apply()
+def app_factory():
+    app = API(
+        title="Moon Interpreter API",
+        version="0.2.0",
+        lifespan=lifespan
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:3000",
+            "https://moon.warn.group"
+        ],
+        allow_credentials=True,
+        allow_methods=['*'],
+        allow_headers=['*'],
+    )
+    app.include_router(router)
+    return app
 
-api = FastAPI(
-    title="Moon Interpreter API",
-    version="0.1.0",
-)
-
-origins = [
-    "http://localhost:3000",
-    "https://moon.warn.group"
-    ]
-
-api.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-events = EventsManager()
-
-class APISession(Session):
-    def __init__(self, dummy: bool = False) -> None:
-        super().__init__(dummy)
-        if not dummy:
-            self.output = ''
-
-            self.input_listener_name = f"input-{self.code}"
-            self.response_listener_name = f"reponse-{self.code}"
-
-    async def __execute(self, source_code: str, output_method: Callable, input_method: Callable) -> None:
-        source_code = source_code.lstrip('\n')
-        source_code = re.sub(
-            pattern=r"^(\s{4})+",
-            repl=lambda m: '\t' * (len(m.group(0)) // 4),
-            string=source_code,
-            flags=re.MULTILINE
-        )
-
-        lexer = build_lexer()
-        lexer.input(source_code)
-        parser = build_parser()
-        parsed_code = parser.parse(source_code+'\n', lexer=lexer)
-
-        execute_program(parsed_code, output_method, input_method)
-
-        events.dispatch(self.response_listener_name, status="completed")
-        self.remove()
-
-    async def start(self, source_code: str) -> None:
-        def output_method(*values: object) -> None:
-            line = ' '.join([str(value) for value in values])
-            self.output += f"{line}\n"
-
-        def input_method(prompt: str) -> str:
-            events.dispatch(self.response_listener_name, status="waiting", prompt=prompt)
-
-            result_input = ''
-            input_event = asyncio.Event()
-            async def input_listener(input: str):
-                nonlocal result_input
-                result_input = input
-
-                self.output += f"{prompt}{input}\n"
-
-                events.remove_listener(input_listener, self.input_listener_name)
-                input_event.set()
-
-            events.add_listener(input_listener, self.input_listener_name)
-
-            # Issue with loop already running
-            loop = asyncio.get_event_loop()
-            loop.run_until_complete(input_event.wait())
-
-            return result_input
-
-        asyncio.create_task(self.__execute(source_code, output_method, input_method))
-
-@api.post("/execute")
-async def execute(request: ExecuteRequest) -> ExecuteResponse:
+@router.post("/execute")
+async def execute(request: ExecuteRequest, raw_request: RawRequest) -> ExecuteResponse:
     """Executes the provided Moon code and returns the results of its execution."""
-    session = APISession()
+    session = ServiceSession(events=raw_request.app.events)
+    events: EventsManager = raw_request.app.events
+    task_group: TaskGroup = raw_request.app.task_group
 
     result_status = "error"
     result_prompt = None
 
-    response_event = asyncio.Event()
+    response_event = Event()
     async def response_listener(status: StatusType, prompt: Optional[str] = None) -> None:
         nonlocal result_status, result_prompt
         result_status = status
@@ -111,7 +59,7 @@ async def execute(request: ExecuteRequest) -> ExecuteResponse:
 
     events.add_listener(response_listener, session.response_listener_name)
 
-    asyncio.create_task(session.start(request.source_code))
+    task_group.start_soon(session.start, request.source_code)
 
     await response_event.wait()
 
@@ -120,19 +68,22 @@ async def execute(request: ExecuteRequest) -> ExecuteResponse:
         status=result_status,
         prompt=result_prompt,
         output=session.output,
+        errors=session.errors
     )
 
-@api.post("/execute/input")
-async def exexcute_input(request: ExecuteInputRequest) -> ExecuteResponse:
+@router.post("/execute/input")
+async def exexcute_input(request: ExecuteInputRequest, raw_request: RawRequest) -> ExecuteResponse:
     """Provides input to an ongoing Moon code execution identified by the session code."""
-    dummy_session = APISession(dummy=True)
+    dummy_session = ServiceSession.dummy_session()
     target_session = dummy_session.get_by_code(request.session_code)
 
     if target_session:
+        events: EventsManager = raw_request.app.events
+
         result_status = "error"
         result_prompt = None
 
-        response_event = asyncio.Event()
+        response_event = Event()
         async def response_listener(status: StatusType, prompt: Optional[str] = None) -> None:
             nonlocal result_status, result_prompt
             result_status = status
@@ -152,6 +103,7 @@ async def exexcute_input(request: ExecuteInputRequest) -> ExecuteResponse:
             status=result_status,
             prompt=result_prompt,
             output=target_session.output,
+            errors=target_session.errors
         )
 
     raise HTTPException(400, "Invalid session code")
