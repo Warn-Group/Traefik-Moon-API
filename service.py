@@ -49,11 +49,16 @@ class ServiceSession(Session):
         if not parsed_code:
             raise ValueError("No instruction to execute")
 
+        def statement_callback(_: dict) -> None:
+            async def statement_wrapper() -> None:
+                await trio.lowlevel.checkpoint_if_cancelled()
+
+            trio.from_thread.run(statement_wrapper)
+
         await trio.to_thread.run_sync(
-            execute_program, parsed_code, output_method, input_method,
+            execute_program, parsed_code, statement_callback, output_method, input_method,
             thread_name=self.code,
-            abandon_on_cancel=True, # if True, thread gets abandoned on cancellation, potentially leading to running forever
-            # within execute_program check for trio.lowlevel.checkpoint_if_cancelled and raise Error within the thread if True
+            abandon_on_cancel=False,
         )
 
         self.events.dispatch(self.response_listener_name, status="completed")
