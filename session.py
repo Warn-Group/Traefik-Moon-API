@@ -1,5 +1,8 @@
 from random import randint
-from typing import Self
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 class Session():
     sessions: list[Self] = []
