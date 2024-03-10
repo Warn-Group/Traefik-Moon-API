@@ -1,27 +1,15 @@
+from anyio import current_time, fail_after, Event
 from events import EventsManager
 from moon import build_lexer, build_parser, execute_program
 from session import Session
-from parallel import call_method, run_parallel
 
 from typing import Callable
 
-import anyio
 import re
+import trio
 
 TIMEOUT_INPUT = 120
-TIMEOUT_RUNNING = 10
-
-def blocking_execute(sock, parsed_code):
-    """This function need to be in the global scope"""
-    with sock.makefile("rb") as f:
-        def input_method(prompt: str):
-            return call_method(sock, f, "input_method", prompt)
-            
-        def output_method(*values: object):
-            return call_method(sock, f, "output_method", *values)
-
-        execute_program(parsed_code, input_method=input_method, output_method=output_method)
-        call_method(sock, f, "break")
+TIMEOUT_RUNNING = 2.5
 
 class ServiceSession(Session):
     def __init__(self, events: EventsManager, timeout: float = TIMEOUT_RUNNING, dummy: bool = False) -> None:
@@ -61,45 +49,49 @@ class ServiceSession(Session):
         if not parsed_code:
             raise ValueError("No instruction to execute")
 
-        methods = {
-            "input_method": input_method, "output_method": output_method
-        }
-
-        await run_parallel(methods, blocking_execute, parsed_code)
+        await trio.to_thread.run_sync(
+            execute_program, parsed_code, output_method, input_method,
+            thread_name=self.code,
+            abandon_on_cancel=True, # if True, thread gets abandoned on cancellation, potentially leading to running forever
+            # within execute_program check for trio.lowlevel.checkpoint_if_cancelled and raise Error within the thread if True
+        )
 
         self.events.dispatch(self.response_listener_name, status="completed")
         self.remove()
 
     async def start(self, source_code: str) -> None:
-        async def output_method(*values: object) -> None:
+        def output_method(*values: object) -> None:
             line = ' '.join([str(value) for value in values])
             self.output += f"{line}\n"
 
-        async def input_method(prompt: str) -> str:
-            self.cancel_scope.deadline = anyio.current_time() + TIMEOUT_INPUT
-            self.events.dispatch(self.response_listener_name, status="waiting", prompt=prompt)
+        def input_method(prompt: str) -> str:
+            async def input_wrapper() -> str:
+                self.cancel_scope.deadline = current_time() + TIMEOUT_INPUT
+                self.events.dispatch(self.response_listener_name, status="waiting", prompt=prompt)
 
-            result_input = ''
-            input_event = anyio.Event()
-            async def input_listener(input: str):
-                nonlocal result_input
-                result_input = input
+                result_input = ''
+                input_event = Event()
+                async def input_listener(input: str):
+                    nonlocal result_input
+                    result_input = input
 
-                self.output += f"{prompt}{input}\n"
+                    self.output += f"{prompt}{input}\n"
 
-                self.events.remove_listener(input_listener, self.input_listener_name)
-                input_event.set()
+                    self.events.remove_listener(input_listener, self.input_listener_name)
+                    input_event.set()
 
-            self.events.add_listener(input_listener, self.input_listener_name)
+                self.events.add_listener(input_listener, self.input_listener_name)
 
-            await input_event.wait()
+                await input_event.wait()
 
-            self.cancel_scope.deadline = anyio.current_time() + TIMEOUT_RUNNING
+                self.cancel_scope.deadline = current_time() + TIMEOUT_RUNNING
 
-            return result_input
+                return result_input
+
+            return trio.from_thread.run(input_wrapper)
 
         try:
-            with anyio.fail_after(self.timeout) as cancel_scope:
+            with fail_after(self.timeout) as cancel_scope:
                 self.cancel_scope = cancel_scope
                 await self.__execute(source_code, output_method, input_method)
         except Exception as exception:
