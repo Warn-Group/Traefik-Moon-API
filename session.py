@@ -1,11 +1,7 @@
 from random import randint
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from typing_extensions import Self
 
 class Session():
-    sessions: list[Self] = []
+    sessions: list = []
 
     def __init__(self, dummy: bool = False) -> None:
         if not dummy:
@@ -27,7 +23,7 @@ class Session():
     def remove(self) -> None:
         self.sessions.remove(self)
 
-    def get_by_code(self, code: str) -> Self | None:
+    def get_by_code(self, code: str):
         for session in self.sessions:
             if session.code == code:
                 return session
