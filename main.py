@@ -1,6 +1,5 @@
 from fastapi import HTTPException
 from anyio import Event, create_task_group
-from anyio.abc import TaskGroup
 from contextlib import asynccontextmanager
 from fastapi import HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +7,7 @@ from typing import Optional
 
 from basetypes import API, ExecuteInputRequest, ExecuteRequest, ExecuteResponse, RawRequest, StatusType
 from events import EventsManager
+from ratelimit import rate_limit
 from service import ServiceSession
 
 @asynccontextmanager
@@ -39,6 +39,7 @@ def app_factory():
     return app
 
 @router.post("/execute")
+@rate_limit(15, 10)
 async def execute(request: ExecuteRequest, raw_request: RawRequest) -> ExecuteResponse:
     """Executes the provided Moon code and returns the results of its execution."""
     session = ServiceSession(events=raw_request.app.events)
