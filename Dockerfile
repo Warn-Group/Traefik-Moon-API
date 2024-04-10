@@ -46,4 +46,4 @@ COPY . .
 EXPOSE 8008
 
 # Run the application.
-CMD hypercorn --bind '0.0.0.0:8008' --worker-class=trio 'main:app_factory()'
+CMD hypercorn --bind '0.0.0.0:8008' --worker-class=trio 'api/main:app_factory()'
