@@ -21,3 +21,7 @@
     b. Linux/MacOS `source .venv/bin/activate`
 3. Install dependencies `pip install -r ./requirements.txt`
 4. Run the API `python -m hypercorn --bind '127.0.0.1:8008' --worker-class=trio 'main:app_factory()'`
+
+#### Using Docker
+
+1. `docker compose up`
