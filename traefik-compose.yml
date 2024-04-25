@@ -1,0 +1,19 @@
+services:
+  moon-api:
+    build:
+      context: .
+    networks:
+      - traefik-bridge
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.moon-api.entrypoints=web, websecure
+      - traefik.http.routers.moon-api.rule=Host(`moon.localhost`)
+      - traefik.http.services.moon-api.loadbalancer.server.port=8008
+      - traefik.http.routers.moon-api.tls=true
+      - traefik.http.routers.moon-api.tls.certresolver=cloudflare
+      - traefik.http.routers.moon-api.tls.domains[0].main=moon-api.warn.group
+      - traefik.http.routers.moon-api.tls.domains[0].sans=*.warn.group
+
+networks:
+  traefik-bridge:
+    external: true
