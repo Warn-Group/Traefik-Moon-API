@@ -8,6 +8,8 @@
 
 ### Installation
 
+`git clone https://github.com/Warn-Group/Traefik-Moon-API moon-api`
+
 #### Global environment
 
 1. Install dependencies `pip install -r ./requirements.txt`
@@ -25,3 +27,7 @@
 #### Using Docker
 
 1. `docker compose up`
+
+#### Using Docker with Traefik
+
+1. `docker compose -f traefik-compose.yml up -d`
