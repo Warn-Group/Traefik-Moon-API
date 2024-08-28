@@ -9,7 +9,7 @@ import re
 import trio
 
 TIMEOUT_INPUT = 120
-TIMEOUT_RUNNING = 2.5
+TIMEOUT_RUNNING = 5
 
 class ServiceSession(Session):
     def __init__(self, events: EventsManager, timeout: float = TIMEOUT_RUNNING, dummy: bool = False) -> None:
