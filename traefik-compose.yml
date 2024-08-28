@@ -2,6 +2,7 @@ services:
   moon-api:
     build:
       context: .
+    restart: always
     networks:
       - traefik-bridge
     labels:
