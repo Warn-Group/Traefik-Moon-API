@@ -8,7 +8,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.http.routers.moon-api.entrypoints=web, websecure
-      - traefik.http.routers.moon-api.rule=Host(`moon.localhost`)
+      - traefik.http.routers.moon-api.rule=Host(`moon-api.warn.group`)
       - traefik.http.services.moon-api.loadbalancer.server.port=8008
       - traefik.http.routers.moon-api.tls=true
       - traefik.http.routers.moon-api.tls.certresolver=cloudflare
