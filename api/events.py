@@ -2,13 +2,22 @@ import asyncio
 import functools
 
 from anyio.abc import TaskGroup
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Literal
 
-class _MissingSentinel:
+
+class SingletonMeta(type):
+    _instances: Dict[type, object] = {}
+
+    def __call__(cls, *args, **kwargs) -> object:
+        if cls not in cls._instances:
+            cls._instances[cls] = super().__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+class _MissingSentinel(metaclass=SingletonMeta):
     __slots__ = ()
 
-    def __eq__(self, other) -> bool:
-        return False
+    def __eq__(self, other: Any) -> bool:
+        return isinstance(other, _MissingSentinel)
 
     def __bool__(self) -> bool:
         return False
@@ -16,7 +25,7 @@ class _MissingSentinel:
     def __hash__(self) -> int:
         return 0
 
-    def __repr__(self):
+    def __repr__(self) -> Literal["..."]:
         return "..."
 
 MISSING: Any = _MissingSentinel()

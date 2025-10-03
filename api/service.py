@@ -47,7 +47,7 @@ class ServiceSession(Session):
             self.errors.append(lexer.errors)
 
         if not parsed_code:
-            raise ValueError("No instruction to execute")
+            raise ValueError("Invalid syntax")
 
         def statement_callback(_: dict) -> None:
             async def statement_wrapper() -> None:
@@ -106,13 +106,15 @@ class ServiceSession(Session):
                 raise exception
 
             except TimeoutError:
-                self.errors.append("Program Timeout: code execution exceeded the allowed time limit")
-            except ExceptionGroup:
-                self.errors.append("Execution Error: an error occurred while running your code")
+                self.errors.append("TimeoutError: code execution exceeded the allowed time limit")
             except ValueError as e:
-                self.errors.append(f"Invalid User Code: {' '.join(e.args)}")
+                self.errors.append(f"UserCodeError: {' '.join(e.args)}")
+            except KeyError as e:
+                self.errors.append(f"DefinitionError: {e.args[0]} is not defined")
+            except TypeError as e:
+                self.errors.append(f"TypeError: {' '.join(e.args)}")
             except Exception as e:
-                self.errors.append(f"Unknown Error: An unexpected error occurred {type(e)}. Please report this issue on Github for further assistance: https://github.com/PaulMarisOUMary/Moon/issues")
+                self.errors.append(f"UnknownError: An unexpected error occurred {type(e)}. Please report this issue on Github for further assistance: https://github.com/PaulMarisOUMary/Moon/issues")
 
             finally:
                 self.remove()
