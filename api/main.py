@@ -1,4 +1,3 @@
-from fastapi import HTTPException
 from anyio import Event, create_task_group
 from contextlib import asynccontextmanager
 from fastapi import HTTPException, APIRouter
@@ -29,9 +28,9 @@ def app_factory():
         CORSMiddleware,
         allow_origins=[
             "http://localhost:3000",
-            "https://moon.warn.group"
+            "https://moon.warn.group",
+            "https://moon-playground.vercel.app",
         ],
-        allow_credentials=True,
         allow_methods=['*'],
         allow_headers=['*'],
     )
