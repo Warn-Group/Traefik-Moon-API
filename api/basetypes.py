@@ -1,7 +1,7 @@
 from anyio.abc import TaskGroup
-from fastapi import Body, FastAPI, Request
-from pydantic import BaseModel
-from typing import Any, Literal, Optional
+from fastapi import FastAPI, Request
+from pydantic import BaseModel, StringConstraints
+from typing import Annotated, Any, Literal, Optional
 
 from events import EventsManager
 
@@ -15,7 +15,7 @@ class API(FastAPI):
 
 # Requests and Responses
 class ExecuteRequest(BaseModel):
-    source_code: str = Body(...)
+    source_code: Annotated[str, StringConstraints(strip_whitespace=True, min_length=0, max_length=500_000)]
 
 StatusType = Literal["completed", "waiting", "error"]
 
@@ -27,8 +27,8 @@ class ExecuteResponse(BaseModel):
     errors: list[Any]
 
 class ExecuteInputRequest(BaseModel):
-    session_code: str
-    input: str = Body(...)
+    session_code: Annotated[str, StringConstraints(min_length=32, max_length=32, pattern=r"^[0-9a-fA-F]{32}$")]
+    input: Annotated[str, StringConstraints(min_length=0, max_length=5_000)]
 
 class RawRequest(Request):
     @property
