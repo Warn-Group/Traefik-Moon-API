@@ -7,13 +7,13 @@ services:
       - traefik-bridge
     labels:
       - traefik.enable=true
-      - traefik.http.routers.moon-api.entrypoints=web, websecure
+      - traefik.http.routers.moon-api.entrypoints=web,websecure
       - traefik.http.routers.moon-api.rule=Host(`moon-api.warn.group`)
-      - traefik.http.services.moon-api.loadbalancer.server.port=8008
+      - traefik.http.routers.moon-api.middlewares=httpsredirect@file
       - traefik.http.routers.moon-api.tls=true
       - traefik.http.routers.moon-api.tls.certresolver=cloudflare
       - traefik.http.routers.moon-api.tls.domains[0].main=moon-api.warn.group
-      - traefik.http.routers.moon-api.tls.domains[0].sans=*.warn.group
+      - traefik.http.services.moon-api.loadbalancer.server.port=8008
 
 networks:
   traefik-bridge:
