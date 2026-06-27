@@ -1,6 +1,7 @@
 from random import randint
 
-class Session():
+
+class Session:
     sessions: list = []
 
     def __init__(self, dummy: bool = False) -> None:

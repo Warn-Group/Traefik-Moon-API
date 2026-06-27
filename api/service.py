@@ -11,8 +11,14 @@ import trio
 TIMEOUT_INPUT = 120
 TIMEOUT_RUNNING = 2.5
 
+
 class ServiceSession(Session):
-    def __init__(self, events: EventsManager, timeout: float = TIMEOUT_RUNNING, dummy: bool = False) -> None:
+    def __init__(
+        self,
+        events: EventsManager,
+        timeout: float = TIMEOUT_RUNNING,
+        dummy: bool = False,
+    ) -> None:
         super().__init__(dummy)
         if not dummy:
             self.output = ''
@@ -27,21 +33,23 @@ class ServiceSession(Session):
     @classmethod
     def dummy_session(cls):
         """This dummy session is only meant to be used for accessing shared sessions without creating one."""
-        return cls(None, dummy=True) # type: ignore
+        return cls(None, dummy=True)  # type: ignore
 
-    async def __execute(self, source_code: str, output_method: Callable, input_method: Callable) -> None:
-        source_code = source_code.lstrip('\n')
+    async def __execute(
+        self, source_code: str, output_method: Callable, input_method: Callable
+    ) -> None:
+        source_code = source_code.lstrip("\n")
         source_code = re.sub(
             pattern=r"^(\s{4})+",
-            repl=lambda m: '\t' * (len(m.group(0)) // 4),
+            repl=lambda m: "\t" * (len(m.group(0)) // 4),
             string=source_code,
-            flags=re.MULTILINE
+            flags=re.MULTILINE,
         )
 
         lexer = build_lexer()
         lexer.input(source_code)
         parser = build_parser()
-        parsed_code = parser.parse(source_code+'\n', lexer=lexer)
+        parsed_code = parser.parse(source_code + "\n", lexer=lexer)
 
         if lexer.errors:
             self.errors.append(lexer.errors)
@@ -56,7 +64,11 @@ class ServiceSession(Session):
             trio.from_thread.run(statement_wrapper)
 
         await trio.to_thread.run_sync(
-            execute_program, parsed_code, statement_callback, output_method, input_method,
+            execute_program,
+            parsed_code,
+            statement_callback,
+            output_method,
+            input_method,
             thread_name=self.code,
             abandon_on_cancel=False,
         )
@@ -72,17 +84,22 @@ class ServiceSession(Session):
         def input_method(prompt: str) -> str:
             async def input_wrapper() -> str:
                 self.cancel_scope.deadline = current_time() + TIMEOUT_INPUT
-                self.events.dispatch(self.response_listener_name, status="waiting", prompt=prompt)
+                self.events.dispatch(
+                    self.response_listener_name, status="waiting", prompt=prompt
+                )
 
                 result_input = ''
                 input_event = Event()
+
                 async def input_listener(input: str):
                     nonlocal result_input
                     result_input = input
 
                     self.output += f"{prompt}{input}\n"
 
-                    self.events.remove_listener(input_listener, self.input_listener_name)
+                    self.events.remove_listener(
+                        input_listener, self.input_listener_name
+                    )
                     input_event.set()
 
                 self.events.add_listener(input_listener, self.input_listener_name)
@@ -106,7 +123,9 @@ class ServiceSession(Session):
                 raise exception
 
             except TimeoutError:
-                self.errors.append("TimeoutError: code execution exceeded the allowed time limit")
+                self.errors.append(
+                    "TimeoutError: code execution exceeded the allowed time limit"
+                )
             except ValueError as e:
                 self.errors.append(f"UserCodeError: {' '.join(e.args)}")
             except KeyError as e:
@@ -114,7 +133,9 @@ class ServiceSession(Session):
             except TypeError as e:
                 self.errors.append(f"TypeError: {' '.join(e.args)}")
             except Exception as e:
-                self.errors.append(f"UnknownError: An unexpected error occurred {type(e)}. Please report this issue on Github for further assistance: https://github.com/PaulMarisOUMary/Moon/issues")
+                self.errors.append(
+                    f"UnknownError: An unexpected error occurred {type(e)}. Please report this issue on Github for further assistance: https://github.com/PaulMarisOUMary/Moon/issues"
+                )
 
             finally:
                 self.remove()
