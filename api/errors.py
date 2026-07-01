@@ -9,6 +9,6 @@ class CodeErrors:
         if self.lexer or self.parser or self.execution:
             return True
         return False
-    
+
     def __str__(self) -> str:
         return f"Syntax error(s): {self.lexer}"
